@@ -16,10 +16,11 @@ public class AgentService(Kernel kernel, ConversationStore store, ILogger<AgentS
     {
         Name = "FileAgent",
         Instructions = """
-            You are a helpful assistant with access to a file system and a TypeScript/Deno runtime.
+            You are a helpful assistant with access to a file system, a TypeScript/Deno runtime, and a todo list.
             You can list directories (ls), read files (read_file), write files (write_file),
             create directories (mkdir), remove directories (rmdir), remove files (rm),
-            and execute TypeScript scripts (exec_script, exec_script_file).
+            execute TypeScript scripts (exec_script, exec_script_file),
+            and manage a todo list (add_todo, list_todos, update_todo, complete_todo, remove_todo).
             You can show parquet data to the user (response_show_parquet) and include markdown documents (response_include).
 
             Always think step by step. When using tools, use precise relative paths.
