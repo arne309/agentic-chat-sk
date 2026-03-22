@@ -9,5 +9,10 @@ export default defineConfig({
 			'/api': 'http://localhost:5092',
 			'/ws': { target: 'ws://localhost:5092', ws: true }
 		}
+	},
+	test: {
+		environment: 'jsdom',
+		include: ['src/**/*.test.ts'],
+		globals: true
 	}
 });

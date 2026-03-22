@@ -19,7 +19,7 @@ builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
         .AllowAnyMethod()));
 
 // Semantic Kernel
-builder.Services.AddSingleton<ScriptSandbox>();
+builder.Services.AddSingleton<IScriptSandbox, ScriptSandbox>();
 builder.Services.AddSingleton(sp =>
 {
     var config = sp.GetRequiredService<IConfiguration>();
@@ -41,7 +41,7 @@ builder.Services.AddSingleton(sp =>
     var kernel = kb.Build();
 
     // Register file system plugin (plugin dependencies resolved manually)
-    var sandbox = sp.GetRequiredService<ScriptSandbox>();
+    var sandbox = sp.GetRequiredService<IScriptSandbox>();
     kernel.Plugins.AddFromObject(new FileSystemPlugin(sandbox, config), "FileSystem");
 
     return kernel;

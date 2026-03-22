@@ -5,7 +5,7 @@ using Microsoft.SemanticKernel;
 
 namespace AgentApp.Backend.Plugins;
 
-public class FileSystemPlugin(ScriptSandbox sandbox, IConfiguration config)
+public class FileSystemPlugin(IScriptSandbox sandbox, IConfiguration config)
 {
     private readonly string _root = Path.GetFullPath(
         config["Workspace:Root"] ?? ".");

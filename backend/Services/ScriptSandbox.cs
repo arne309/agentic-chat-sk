@@ -3,7 +3,13 @@ using System.Text;
 
 namespace AgentApp.Backend.Services;
 
-public class ScriptSandbox(IConfiguration config, ILogger<ScriptSandbox> logger)
+public interface IScriptSandbox
+{
+    Task<string> RunAsync(string scriptContent, CancellationToken ct = default);
+    Task<string> RunFileAsync(string scriptPath, CancellationToken ct = default);
+}
+
+public class ScriptSandbox(IConfiguration config, ILogger<ScriptSandbox> logger) : IScriptSandbox
 {
     private readonly string _root = Path.GetFullPath(
         config["Workspace:Root"] ?? ".");
