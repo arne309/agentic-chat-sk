@@ -41,6 +41,10 @@ jobs:
         with:
           dotnet-version: '9.0.x'
 
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
       - name: Restore dependencies
         run: dotnet restore
 
