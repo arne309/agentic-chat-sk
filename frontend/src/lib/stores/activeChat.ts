@@ -108,6 +108,29 @@ export function handleServerMessage(msg: ServerMessage): void {
 			);
 			break;
 
+		case 'data_block':
+			messages.update((msgs) =>
+				msgs.map((m) =>
+					m.id === msg.messageId
+						? {
+								...m,
+								parts: [
+									...m.parts,
+									{
+										kind: 'data_block',
+										source: msg.source,
+										columns: msg.columns,
+										rows: msg.rows,
+										totalRowCount: msg.totalRowCount,
+										previewRowCount: msg.previewRowCount
+									}
+								]
+						  }
+						: m
+				)
+			);
+			break;
+
 		case 'agent_done':
 			messages.update((msgs) =>
 				msgs.map((m) => (m.id === msg.messageId ? { ...m, streaming: false } : m))

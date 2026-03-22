@@ -31,6 +31,7 @@ public record PingMessage : ClientMessage;
 [JsonDerivedType(typeof(PongMessage), "pong")]
 [JsonDerivedType(typeof(ConversationUpdatedMessage), "conversation_updated")]
 [JsonDerivedType(typeof(ContentBlockMessage), "content_block")]
+[JsonDerivedType(typeof(DataBlockMessage), "data_block")]
 public abstract record ServerMessage;
 
 public record AgentStartMessage(
@@ -74,3 +75,12 @@ public record ContentBlockMessage(
     [property: JsonPropertyName("messageId")] string MessageId,
     [property: JsonPropertyName("source")] string Source,
     [property: JsonPropertyName("content")] string Content) : ServerMessage;
+
+public record DataBlockMessage(
+    [property: JsonPropertyName("conversationId")] string ConversationId,
+    [property: JsonPropertyName("messageId")] string MessageId,
+    [property: JsonPropertyName("source")] string Source,
+    [property: JsonPropertyName("columns")] List<DataColumnInfo> Columns,
+    [property: JsonPropertyName("rows")] List<List<object?>> Rows,
+    [property: JsonPropertyName("totalRowCount")] long TotalRowCount,
+    [property: JsonPropertyName("previewRowCount")] int PreviewRowCount) : ServerMessage;

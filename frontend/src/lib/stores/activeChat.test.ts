@@ -282,6 +282,42 @@ describe('handleServerMessage', () => {
 		expect(get(isStreaming)).toBe(false);
 	});
 
+	it('data_block appends data_block part', () => {
+		handleServerMessage({
+			type: 'agent_start',
+			conversationId: convId,
+			messageId: 'm1'
+		});
+
+		handleServerMessage({
+			type: 'data_block',
+			conversationId: convId,
+			messageId: 'm1',
+			source: 'data.parquet',
+			columns: [
+				{ name: 'id', type: 'int' },
+				{ name: 'name', type: 'string' }
+			],
+			rows: [
+				[1, 'Alice'],
+				[2, 'Bob']
+			],
+			totalRowCount: 2,
+			previewRowCount: 2
+		});
+
+		const parts = get(messages)[0].parts;
+		const db = parts[parts.length - 1];
+		expect(db.kind).toBe('data_block');
+		if (db.kind === 'data_block') {
+			expect(db.source).toBe('data.parquet');
+			expect(db.columns).toHaveLength(2);
+			expect(db.rows).toHaveLength(2);
+			expect(db.totalRowCount).toBe(2);
+			expect(db.previewRowCount).toBe(2);
+		}
+	});
+
 	it('conversation_updated calls upsertConversation', () => {
 		const summary = {
 			id: 'c1',

@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Channels;
 using AgentApp.Backend.Models;
 using Microsoft.SemanticKernel;
@@ -16,8 +18,10 @@ public class AgentService(Kernel kernel, ConversationStore store, ILogger<AgentS
         Instructions = """
             You are a helpful assistant with access to a file system, a TypeScript/Deno runtime, and a todo list.
             You can list directories (ls), read files (read_file), write files (write_file),
-            execute TypeScript scripts (exec_script), and manage a todo list (add_todo, list_todos,
-            update_todo, complete_todo, remove_todo).
+            create directories (mkdir), remove directories (rmdir), remove files (rm),
+            execute TypeScript scripts (exec_script, exec_script_file),
+            and manage a todo list (add_todo, list_todos, update_todo, complete_todo, remove_todo).
+            You can show parquet data to the user (response_show_parquet) and include markdown documents (response_include).
 
             Always think step by step. When using tools, use precise relative paths.
             After using tools, summarize what you found or did in clear language.
@@ -154,6 +158,37 @@ internal class WsToolCallFilter(
                 new ToolResultMessage(conversationId, messageId,
                     context.Function.Name, $"Rendered {source}", sw.ElapsedMilliseconds));
         }
+        else if (context.Function.Name == "response_show_parquet")
+        {
+            var source = args.TryGetValue("path", out var p) ? p?.ToString() ?? "" : "";
+            var preview = JsonSerializer.Deserialize<DataBlockPreview>(result);
+            if (preview is not null)
+            {
+                var dataPart = new DataBlockPart
+                {
+                    Source = source,
+                    Columns = preview.Columns,
+                    Rows = preview.Rows,
+                    TotalRowCount = preview.TotalRowCount,
+                    PreviewRowCount = preview.PreviewRowCount
+                };
+                Parts.Add(dataPart);
+                await channel.WriteAsync(
+                    new DataBlockMessage(conversationId, messageId, source,
+                        preview.Columns, preview.Rows, preview.TotalRowCount, preview.PreviewRowCount));
+                await channel.WriteAsync(
+                    new ToolResultMessage(conversationId, messageId,
+                        context.Function.Name,
+                        $"Displayed {preview.PreviewRowCount} of {preview.TotalRowCount} rows from {source}",
+                        sw.ElapsedMilliseconds));
+            }
+            else
+            {
+                await channel.WriteAsync(
+                    new ToolResultMessage(conversationId, messageId,
+                        context.Function.Name, result, sw.ElapsedMilliseconds));
+            }
+        }
         else
         {
             await channel.WriteAsync(
@@ -161,4 +196,19 @@ internal class WsToolCallFilter(
                     context.Function.Name, result, sw.ElapsedMilliseconds));
         }
     }
+}
+
+internal class DataBlockPreview
+{
+    [JsonPropertyName("columns")]
+    public List<DataColumnInfo> Columns { get; set; } = [];
+
+    [JsonPropertyName("rows")]
+    public List<List<object?>> Rows { get; set; } = [];
+
+    [JsonPropertyName("totalRowCount")]
+    public long TotalRowCount { get; set; }
+
+    [JsonPropertyName("previewRowCount")]
+    public int PreviewRowCount { get; set; }
 }

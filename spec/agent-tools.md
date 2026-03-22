@@ -47,6 +47,36 @@ Creates or overwrites a file within the workspace.
 
 **Notes**: Automatically creates parent directories if they don't exist.
 
+### `mkdir`
+
+Creates a directory (and any parent directories) within the workspace. Succeeds silently if the directory already exists.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | string | Yes | Relative path of the directory to create |
+
+**Returns**: Confirmation message.
+
+### `rmdir`
+
+Removes an empty directory from the workspace. Fails if the directory is not empty.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | string | Yes | Relative path of the directory to remove |
+
+**Returns**: Confirmation message, or error message if directory is not found or not empty.
+
+### `rm`
+
+Removes a file from the workspace.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | string | Yes | Relative path of the file to remove |
+
+**Returns**: Confirmation message, or error message if file is not found.
+
 ### `exec_script`
 
 Executes an inline TypeScript script using the Deno runtime.
@@ -81,6 +111,18 @@ Reads a markdown file from the workspace and displays it as a rich content block
 
 **Special behavior**: The `WsToolCallFilter` intercepts this tool call and emits an additional `content_block` WebSocket message, causing the frontend to render the file as an inline document card with rendered markdown.
 
+### `response_show_parquet`
+
+Loads a Parquet file from the workspace and displays its contents as an interactive data table in the conversation. The user can download the data as CSV, Parquet, or XLSX.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | string | Yes | Relative path to the .parquet file |
+
+**Returns**: JSON with `columns` (array of {name, type}), `rows` (first 100 rows), `totalRowCount`, and `previewRowCount`.
+
+**Special behavior**: The `WsToolCallFilter` intercepts this tool call and emits a `data_block` WebSocket message. The frontend renders it as a scrollable data table with download buttons for CSV, Parquet, and XLSX formats. Downloads are served via `GET /api/workspace/download?path={path}&format={csv|parquet|xlsx}`.
+
 ## Sandbox Security
 
 All file operations are sandboxed to the workspace directory (`../workspace` relative to the backend, configurable via `Workspace:Root`).
@@ -105,7 +147,9 @@ The agent receives the following system prompt:
 ```
 You are a helpful assistant with access to a file system and a TypeScript/Deno runtime.
 You can list directories (ls), read files (read_file), write files (write_file),
-and execute TypeScript scripts (exec_script).
+create directories (mkdir), remove directories (rmdir), remove files (rm),
+and execute TypeScript scripts (exec_script, exec_script_file).
+You can show parquet data to the user (response_show_parquet) and include markdown documents (response_include).
 
 Always think step by step. When using tools, use precise relative paths.
 After using tools, summarize what you found or did in clear language.
