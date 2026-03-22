@@ -21,6 +21,7 @@ public enum MessageRole { User, Assistant }
 [JsonDerivedType(typeof(TextPart), "text")]
 [JsonDerivedType(typeof(ToolCallPart), "tool_call")]
 [JsonDerivedType(typeof(ContentBlockPart), "content_block")]
+[JsonDerivedType(typeof(DataBlockPart), "data_block")]
 public abstract class MessagePart { }
 
 public class TextPart : MessagePart
@@ -57,4 +58,31 @@ public class ContentBlockPart : MessagePart
 
     [JsonPropertyName("content")]
     public string Content { get; set; } = "";
+}
+
+public class DataBlockPart : MessagePart
+{
+    [JsonPropertyName("source")]
+    public string Source { get; set; } = "";
+
+    [JsonPropertyName("columns")]
+    public List<DataColumnInfo> Columns { get; set; } = [];
+
+    [JsonPropertyName("rows")]
+    public List<List<object?>> Rows { get; set; } = [];
+
+    [JsonPropertyName("totalRowCount")]
+    public long TotalRowCount { get; set; }
+
+    [JsonPropertyName("previewRowCount")]
+    public int PreviewRowCount { get; set; }
+}
+
+public class DataColumnInfo
+{
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = "";
+
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = "";
 }

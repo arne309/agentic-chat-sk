@@ -1,9 +1,12 @@
 using System.Text.Json;
+using AgentApp.Backend.Models;
 using AgentApp.Backend.Plugins;
 using AgentApp.Backend.Services;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using NSubstitute;
+using Parquet;
+using Parquet.Schema;
 
 namespace AgentApp.Backend.Tests.Plugins;
 
@@ -220,5 +223,179 @@ public class FileSystemPluginTests : IDisposable
     {
         var result = await _plugin.ExecScriptFileAsync("nope.ts");
         result.Should().StartWith("File not found:");
+    }
+
+    // ── mkdir ─────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void MakeDirectory_CreatesDirectory()
+    {
+        var result = _plugin.MakeDirectory("newdir");
+        result.Should().Contain("Created directory:");
+        Directory.Exists(Path.Combine(_tempDir, "newdir")).Should().BeTrue();
+    }
+
+    [Fact]
+    public void MakeDirectory_NestedPath_CreatesParentDirs()
+    {
+        var result = _plugin.MakeDirectory("a/b/c");
+        result.Should().Contain("Created directory:");
+        Directory.Exists(Path.Combine(_tempDir, "a", "b", "c")).Should().BeTrue();
+    }
+
+    [Fact]
+    public void MakeDirectory_AlreadyExists_Succeeds()
+    {
+        Directory.CreateDirectory(Path.Combine(_tempDir, "existing"));
+        var result = _plugin.MakeDirectory("existing");
+        result.Should().Contain("Created directory:");
+    }
+
+    [Fact]
+    public void MakeDirectory_PathTraversal_Throws()
+    {
+        var act = () => _plugin.MakeDirectory("../../evil");
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Access denied*");
+    }
+
+    // ── rmdir ─────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void RemoveDirectory_RemovesEmptyDirectory()
+    {
+        Directory.CreateDirectory(Path.Combine(_tempDir, "todelete"));
+
+        var result = _plugin.RemoveDirectory("todelete");
+        result.Should().Contain("Removed directory:");
+        Directory.Exists(Path.Combine(_tempDir, "todelete")).Should().BeFalse();
+    }
+
+    [Fact]
+    public void RemoveDirectory_NotEmpty_Fails()
+    {
+        var dir = Path.Combine(_tempDir, "notempty");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "file.txt"), "content");
+
+        var result = _plugin.RemoveDirectory("notempty");
+        result.Should().Contain("Directory is not empty:");
+        Directory.Exists(dir).Should().BeTrue();
+    }
+
+    [Fact]
+    public void RemoveDirectory_NotFound_ReturnsMessage()
+    {
+        var result = _plugin.RemoveDirectory("nosuchdir");
+        result.Should().StartWith("Directory not found:");
+    }
+
+    [Fact]
+    public void RemoveDirectory_PathTraversal_Throws()
+    {
+        var act = () => _plugin.RemoveDirectory("../../evil");
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Access denied*");
+    }
+
+    // ── rm ────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void RemoveFile_DeletesFile()
+    {
+        File.WriteAllText(Path.Combine(_tempDir, "deleteme.txt"), "bye");
+
+        var result = _plugin.RemoveFile("deleteme.txt");
+        result.Should().Contain("Removed file:");
+        File.Exists(Path.Combine(_tempDir, "deleteme.txt")).Should().BeFalse();
+    }
+
+    [Fact]
+    public void RemoveFile_NotFound_ReturnsMessage()
+    {
+        var result = _plugin.RemoveFile("nosuchfile.txt");
+        result.Should().StartWith("File not found:");
+    }
+
+    [Fact]
+    public void RemoveFile_PathTraversal_Throws()
+    {
+        var act = () => _plugin.RemoveFile("../../evil.txt");
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Access denied*");
+    }
+
+    // ── response_show_parquet ─────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ResponseShowParquet_ReadsParquetFile()
+    {
+        var parquetPath = Path.Combine(_tempDir, "test.parquet");
+        await CreateTestParquetFile(parquetPath, 5);
+
+        var result = await _plugin.ResponseShowParquetAsync("test.parquet");
+        var preview = JsonSerializer.Deserialize<JsonElement>(result);
+
+        preview.GetProperty("totalRowCount").GetInt64().Should().Be(5);
+        preview.GetProperty("previewRowCount").GetInt32().Should().Be(5);
+
+        var columns = preview.GetProperty("columns").EnumerateArray().ToList();
+        columns.Should().HaveCount(3);
+        columns[0].GetProperty("name").GetString().Should().Be("id");
+        columns[1].GetProperty("name").GetString().Should().Be("name");
+        columns[2].GetProperty("name").GetString().Should().Be("score");
+
+        var rows = preview.GetProperty("rows").EnumerateArray().ToList();
+        rows.Should().HaveCount(5);
+    }
+
+    [Fact]
+    public async Task ResponseShowParquet_LargeFile_LimitsTo100Rows()
+    {
+        var parquetPath = Path.Combine(_tempDir, "large.parquet");
+        await CreateTestParquetFile(parquetPath, 200);
+
+        var result = await _plugin.ResponseShowParquetAsync("large.parquet");
+        var preview = JsonSerializer.Deserialize<JsonElement>(result);
+
+        preview.GetProperty("totalRowCount").GetInt64().Should().Be(200);
+        preview.GetProperty("previewRowCount").GetInt32().Should().Be(100);
+
+        var rows = preview.GetProperty("rows").EnumerateArray().ToList();
+        rows.Should().HaveCount(100);
+    }
+
+    [Fact]
+    public async Task ResponseShowParquet_FileNotFound()
+    {
+        var result = await _plugin.ResponseShowParquetAsync("missing.parquet");
+        result.Should().StartWith("File not found:");
+    }
+
+    [Fact]
+    public void ResponseShowParquet_PathTraversal_Throws()
+    {
+        var act = () => _plugin.ResponseShowParquetAsync("../../evil.parquet");
+        act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Access denied*");
+    }
+
+    private static async Task CreateTestParquetFile(string path, int rowCount)
+    {
+        var schema = new ParquetSchema(
+            new DataField<int>("id"),
+            new DataField<string>("name"),
+            new DataField<double>("score"));
+
+        var ids = Enumerable.Range(1, rowCount).ToArray();
+        var names = Enumerable.Range(1, rowCount).Select(i => $"item_{i}").ToArray();
+        var scores = Enumerable.Range(1, rowCount).Select(i => i * 1.5).ToArray();
+
+        using var stream = File.Create(path);
+        using var writer = await ParquetWriter.CreateAsync(schema, stream);
+        using var rg = writer.CreateRowGroup();
+        await rg.WriteColumnAsync(new Parquet.Data.DataColumn(schema.DataFields[0], ids));
+        await rg.WriteColumnAsync(new Parquet.Data.DataColumn(schema.DataFields[1], names));
+        await rg.WriteColumnAsync(new Parquet.Data.DataColumn(schema.DataFields[2], scores));
     }
 }

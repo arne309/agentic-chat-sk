@@ -1,7 +1,10 @@
 using System.ComponentModel;
 using System.Text.Json;
+using AgentApp.Backend.Models;
 using AgentApp.Backend.Services;
 using Microsoft.SemanticKernel;
+using Parquet;
+using Parquet.Schema;
 
 namespace AgentApp.Backend.Plugins;
 
@@ -97,6 +100,42 @@ public class FileSystemPlugin(IScriptSandbox sandbox, IConfiguration config)
         return await sandbox.RunFileAsync(fullPath);
     }
 
+    [KernelFunction("mkdir")]
+    [Description("Create a directory (and any parent directories) in the workspace. Succeeds silently if the directory already exists.")]
+    public string MakeDirectory(
+        [Description("Directory path relative to workspace root")] string path)
+    {
+        var fullPath = ResolveSafe(path);
+        Directory.CreateDirectory(fullPath);
+        return $"Created directory: {path}";
+    }
+
+    [KernelFunction("rmdir")]
+    [Description("Remove an empty directory from the workspace. Fails if the directory is not empty.")]
+    public string RemoveDirectory(
+        [Description("Directory path relative to workspace root")] string path)
+    {
+        var fullPath = ResolveSafe(path);
+        if (!Directory.Exists(fullPath))
+            return $"Directory not found: {path}";
+        if (Directory.EnumerateFileSystemEntries(fullPath).Any())
+            return $"Directory is not empty: {path}";
+        Directory.Delete(fullPath, recursive: false);
+        return $"Removed directory: {path}";
+    }
+
+    [KernelFunction("rm")]
+    [Description("Remove a file from the workspace.")]
+    public string RemoveFile(
+        [Description("File path relative to workspace root")] string path)
+    {
+        var fullPath = ResolveSafe(path);
+        if (!File.Exists(fullPath))
+            return $"File not found: {path}";
+        File.Delete(fullPath);
+        return $"Removed file: {path}";
+    }
+
     [KernelFunction("response_include")]
     [Description("Use when showing large amounts of data directly to the user. Reads a Markdown file from the workspace and renders it inline in the conversation as a document card.")]
     public string ResponseInclude(
@@ -106,6 +145,83 @@ public class FileSystemPlugin(IScriptSandbox sandbox, IConfiguration config)
         if (!File.Exists(fullPath))
             return $"File not found: {path}";
         return File.ReadAllText(fullPath);
+    }
+
+    [KernelFunction("response_show_parquet")]
+    [Description("Load a Parquet file and display its contents as an interactive data table in the conversation. The user can download the data as CSV, Parquet, or XLSX.")]
+    public async Task<string> ResponseShowParquetAsync(
+        [Description("Path to the .parquet file relative to workspace root")] string path)
+    {
+        var fullPath = ResolveSafe(path);
+        if (!File.Exists(fullPath))
+            return $"File not found: {path}";
+
+        using var stream = File.OpenRead(fullPath);
+        using var reader = await ParquetReader.CreateAsync(stream);
+
+        var dataFields = reader.Schema.GetDataFields();
+        var columns = dataFields.Select(f => new DataColumnInfo
+        {
+            Name = f.Name,
+            Type = MapParquetType(f.ClrType)
+        }).ToList();
+
+        // Calculate total row count from row group metadata
+        long totalRowCount = 0;
+        for (int i = 0; i < reader.RowGroupCount; i++)
+        {
+            using var rg = reader.OpenRowGroupReader(i);
+            totalRowCount += rg.RowCount;
+        }
+
+        // Read up to 100 preview rows
+        const int maxPreviewRows = 100;
+        var rows = new List<List<object?>>();
+        int remaining = maxPreviewRows;
+
+        for (int i = 0; i < reader.RowGroupCount && remaining > 0; i++)
+        {
+            using var rg = reader.OpenRowGroupReader(i);
+            var columnArrays = new Array[dataFields.Length];
+            for (int c = 0; c < dataFields.Length; c++)
+            {
+                var col = await rg.ReadColumnAsync(dataFields[c]);
+                columnArrays[c] = col.Data;
+            }
+
+            var rowsInGroup = (int)Math.Min(rg.RowCount, remaining);
+            for (int r = 0; r < rowsInGroup; r++)
+            {
+                var row = new List<object?>();
+                for (int c = 0; c < dataFields.Length; c++)
+                    row.Add(columnArrays[c].GetValue(r));
+                rows.Add(row);
+            }
+            remaining -= rowsInGroup;
+        }
+
+        var preview = new
+        {
+            columns,
+            rows,
+            totalRowCount,
+            previewRowCount = rows.Count
+        };
+
+        return JsonSerializer.Serialize(preview);
+    }
+
+    private static string MapParquetType(Type clrType)
+    {
+        var underlying = Nullable.GetUnderlyingType(clrType) ?? clrType;
+        if (underlying == typeof(string)) return "string";
+        if (underlying == typeof(int) || underlying == typeof(long) ||
+            underlying == typeof(short) || underlying == typeof(byte)) return "int";
+        if (underlying == typeof(float) || underlying == typeof(double) ||
+            underlying == typeof(decimal)) return "double";
+        if (underlying == typeof(bool)) return "bool";
+        if (underlying == typeof(DateTime) || underlying == typeof(DateTimeOffset)) return "datetime";
+        return "string";
     }
 
     private string ResolveSafe(string path)

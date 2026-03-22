@@ -3,6 +3,7 @@
 	import { renderMarkdown } from '../markdown';
 	import ToolCallBadge from './ToolCallBadge.svelte';
 	import ContentBlock from './ContentBlock.svelte';
+	import DataBlock from './DataBlock.svelte';
 	import StreamingCursor from './StreamingCursor.svelte';
 
 	let { message }: { message: Message } = $props();
@@ -23,6 +24,14 @@
 				<ToolCallBadge toolCall={part.toolCall} />
 			{:else if part.kind === 'content_block'}
 				<ContentBlock source={part.source} content={part.content} />
+			{:else if part.kind === 'data_block'}
+				<DataBlock
+					source={part.source}
+					columns={part.columns}
+					rows={part.rows}
+					totalRowCount={part.totalRowCount}
+					previewRowCount={part.previewRowCount}
+				/>
 			{:else if part.kind === 'text' && part.content}
 				{#if message.role === 'assistant'}
 					<div
