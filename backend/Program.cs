@@ -43,6 +43,7 @@ builder.Services.AddSingleton(sp =>
     // Register file system plugin (plugin dependencies resolved manually)
     var sandbox = sp.GetRequiredService<IScriptSandbox>();
     kernel.Plugins.AddFromObject(new FileSystemPlugin(sandbox, config), "FileSystem");
+    kernel.Plugins.AddFromObject(new TodoListPlugin(), "TodoList");
 
     return kernel;
 });
