@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Backend",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "backend", "--urls", "http://localhost:5092"],
+      "port": 5092
+    },
+    {
+      "name": "Frontend",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--dir", "frontend", "dev", "--port", "5173"],
+      "port": 5173
+    }
+  ]
+}

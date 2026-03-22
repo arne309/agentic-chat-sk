@@ -1,0 +1,26 @@
+# .NET
+backend/bin/
+backend/obj/
+*.user
+.vs/
+
+# Secrets
+**/appsettings.Development.json
+*.env
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Frontend
+frontend/node_modules/
+frontend/.svelte-kit/
+frontend/build/
+frontend/dist/
+
+# Workspace (agent sandbox) — keep directory, ignore generated files
+workspace/*
+!workspace/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
